@@ -3,9 +3,12 @@
 English | [中文](README.zh.md)
 
 Chat with the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) agent on your computer from WeChat.
+Clawbot is a DSH plugin and fully open source. It replies with the AI you use in DSH and does not upload your information.
 Away from your desk, you can still ask it to look through files, edit documents or run commands, and the results come back to the WeChat chat.
 
-It uses WeChat's official **微信ClawBot** channel (Tencent iLink): no second account and no web-login tricks.
+It uses WeChat's official **微信ClawBot** channel: just scan a QR code to log in.
+
+After nearly two months of development and real-world use, `wechat-clawbot` has become steadily more stable and economical, and the stable release **v1.0.0** came out on 10 October 2026.
 
 ## What it does
 
@@ -19,13 +22,21 @@ It uses WeChat's official **微信ClawBot** channel (Tencent iLink): no second a
 - **Understands quotes**: reply to an older message with WeChat's quote feature and it knows which one you mean
 - **Long chats stay quick**: when the conversation gets long, it tidies older messages into a summary during a quiet spell after a reply, so your next message never waits for it
 
+## Cost
+
+- When the author uses gpt-6-luna, one WeChat message costs about $0.005–0.007 on average; at around 7 messages a day that is about $1.4 a month (under ¥10).
+
 ## Requirements
 
-- DSH **0.1.7 – 0.2.x** (tested on 0.1.7-rc.2 and 0.2.0-rc.2), Node.js 22+ and pnpm
+- DSH **0.1.7 – 0.2.0** (tested on 0.1.7-rc.2 and 0.2.0-rc.2), Node.js 22+ and pnpm
 - The official **微信ClawBot** plugin in the WeChat mobile app (WeChat → Settings → Plugins; the first scan may ask you to update WeChat)
 - A computer that stays on: the bot is online while DSH is running
 
 ## Set up in three steps
+
+**0. Got an agent?**
+
+Copy the link to this page, or tell any agent `wechat-clawbot`, and ask it to install it into DSH. Or:
 
 **1. Install the plugin**
 
@@ -45,7 +56,7 @@ A QR code appears in the terminal. Scan it with WeChat's "Scan" and confirm.
 
 **3. Start chatting**
 
-A new contact, **微信ClawBot**, shows up in WeChat. Message it. The running DSH picks up the new link within a few seconds, so no restart is needed.
+A new contact, **微信ClawBot**, shows up in WeChat. Message it. The running DSH picks up the new link automatically and starts a conversation.
 
 Other commands: `clawbot status` shows who is linked, `clawbot logout` unlinks (use the same `npx -y -p wechat-clawbot` prefix).
 
@@ -59,7 +70,7 @@ Open **Plugins → wechat-clawbot → 微信 Bot** in the DSH web sidebar. Chang
 - **空闲时整理对话** (tidy up while idle): on by default. Off leaves only DSH's own compaction, which runs right before a reply and makes that reply wait.
 - **把工作目录的说明文件交给 bot** (workspace instruction files): on by default (DSH's own behaviour: once the bot works in a project, its AGENTS.md / CLAUDE.md is put into the chat, and the whole file again after every edit). Off keeps them out of the WeChat session, which helps when those files are long and change often; the bot can still read them when it needs to.
 - **开放 MCP 桥（Claude / Codex）** (MCP bridge): see the integrations below.
-- **Codex 会话联动**: select a Codex project and conversation, relay a message, or query progress.
+- **Codex 会话联动**: select a Codex project and conversation, relay a message, or query progress. Off by default; when on, every request carries 5 more tools (about 1k tokens). Changing it restarts the WeChat listener.
 
 A few options (the session id, the working directory, whether to start with DSH) live in the `- id: clawbot` entry of
 `~/.dsh/profiles/web/cordis.patch.yml`. Changing them restarts the WeChat listener automatically.
@@ -135,6 +146,7 @@ Codex can read `clawbot://wechat-session` or call `dsh_get_wechat_session` to se
 `dsh_notify_wechat({text: "…"})` sends only to the QR-linked owner and records a `[Codex 发给用户的]` copy in DSH history;
 it does not start another bot turn. `dsh_send_to_session` drives a selected DSH conversation without automatically
 forwarding its replies to WeChat. Use the notification tool when you want a phone update.
+Both tools are marked as having outside effects, so with Codex's default approval settings it asks you before each call.
 
 ### Choose the Codex project and conversation from WeChat
 
@@ -142,7 +154,8 @@ The default `codexTransport: socket` connects to an existing shared App Server u
 The default socket is `$CODEX_HOME/app-server-control/app-server-control.sock` (`CODEX_HOME` defaults to `~/.codex`).
 Set `codexSocket` to use a specific shared server's socket. Set `codexBinary` to select the CLI for standalone mode.
 These fields belong in the `clawbot` row of
-your local DSH `cordis.patch.yml`; changing them restarts the plugin. `codexPeer` is a live switch in the settings card.
+your local DSH `cordis.patch.yml`; changing them restarts the plugin. `codexPeer` is the switch in the settings card. It is off by default,
+and while it is off none of these tools is sent to the model; changing it also restarts the WeChat listener.
 
 The server must be the one executing the selected conversations and support the documented Unix socket WebSocket transport.
 You can start a local shared service with `codex app-server --listen unix://` or `--listen unix:///path/to/rpc.sock`.
@@ -175,6 +188,9 @@ close its original client and explicitly permit background continuation (`allowR
 No model, sandbox, or approval policy is overridden. Command/file approval requests and user questions from
 this independent runner go to WeChat; unsupported permission grants are declined. Shared-server approvals remain
 with the existing Codex client.
+**stdio mode is experimental**: the approval prompts it forwards to WeChat do not yet show full details (exact
+changes, extra permissions), and they go to whoever is chatting with the bot at the time. Use it only when you are the
+bot's only allowed sender. The default socket mode is not affected.
 
 ### Let clawbot report progress
 
@@ -196,6 +212,10 @@ The progress HTTP routes are `POST /plugins/clawbot/mcp/codex/report` and
 the existing session/notification routes. The MCP client accepts loopback origins only and refuses redirects.
 No login data, conversation snapshots, preferences, project inventories, or local workspace indexes are bundled in the package.
 Protocol reference: [Codex App Server](https://learn.chatgpt.com/docs/app-server).
+
+## Contributors
+
+- [@MistyHuang03](https://github.com/MistyHuang03): Codex integration ([#1](https://github.com/Alphainfix/wechat-clawbot/pull/1))
 
 ## Development
 

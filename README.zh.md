@@ -3,9 +3,12 @@
 [English](README.md) | 中文
 
 在微信里和你电脑上的 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）助手聊天。
+Clawbot 作为 DSH 插件，完全开源，使用 DSH 的 AI 进行回复，不会上传用户信息。
 出门在外也能让它查文件、改文档、跑命令，结果直接回到微信对话里。
 
-它走的是微信官方的 **微信ClawBot** 通道（腾讯 iLink），不用小号、不模拟网页登录。
+它走的是微信官方的 **微信ClawBot** 通道，扫码登录即可。
+
+经过近两个月的开发和实测，`wechat-clawbot` 日趋稳定、省钱，现于2026年10月10日发布稳定版 **v1.0.0**。
 
 ## 能做什么
 
@@ -19,13 +22,21 @@
 - **看得懂引用**：引用一条旧消息回复，它知道你在说哪条
 - **聊得越久也不变慢**：回复结束、安静一阵之后，对话太长就趁空闲把旧内容整理成摘要，你下一条消息来时不用等
 
+## 成本
+
+- 作者用 gpt-6-luna 时，一条微信对话的平均成本约 $0.005–0.007，每天 7 条左右、一个月约 $1.4，不到 ￥10。
+
 ## 需要什么
 
-- DSH **0.1.7 到 0.2.x**（在 0.1.7-rc.2 和 0.2.0-rc.2 上测过），以及 Node.js 22+、pnpm
+- DSH **0.1.7 到 0.2.0**（在 0.1.7-rc.2 和 0.2.0-rc.2 上测过），以及 Node.js 22+、pnpm
 - 手机微信里能用官方「**微信ClawBot**」插件（微信 → 设置 → 插件；第一次扫码时可能会提示升级微信）
 - 一台一直开着的电脑：DSH 在运行，bot 才在线
 
 ## 三步装好
+
+**0. 有 Agent**
+
+复制这个网站，或者跟任何 Agent 说 `wechat-clawbot`，让它帮忙安装到DSH即可。或者：
 
 **1. 安装插件**
 
@@ -45,7 +56,7 @@ npx -y -p wechat-clawbot clawbot login
 
 **3. 开始聊天**
 
-微信里会多出一个联系人「**微信ClawBot**」，给它发消息就行。正在运行的 DSH 几秒内会自动认出新绑定的账号，不用重启。
+微信里会多出一个联系人「**微信ClawBot**」，给它发消息就行。正在运行的 DSH 会自动认出新绑定的账号，并开启一个对话。
 
 其他命令：`clawbot status` 看绑定的是谁，`clawbot logout` 解除绑定（同样用 `npx -y -p wechat-clawbot` 前缀）。
 
@@ -59,7 +70,7 @@ npx -y -p wechat-clawbot clawbot login
 - **空闲时整理对话**：默认开。关掉后只剩 DSH 在回复前压缩（会让那一条回复多等十几秒）。
 - **把工作目录的说明文件交给 bot**：默认开（DSH 原样：bot 在哪个项目里干过活，那里的 AGENTS.md / CLAUDE.md 就会塞进对话，文件每改一次再塞一整份）。关掉则微信会话里不再自动塞，适合说明文件很长、又经常改的人；需要时让 bot 自己去读。
 - **开放 MCP 桥（Claude / Codex）**：见下面的联动说明。
-- **Codex 会话联动**：选择 Codex 项目和对话、转发消息、查询进度。
+- **Codex 会话联动**：选择 Codex 项目和对话、转发消息、查询进度。默认关；打开后每次请求要多带 5 个工具（约 1k token），改动会重启微信监听。
 
 少数几项（会话 id、工作目录、是否随 DSH 自动启动等）在 `~/.dsh/profiles/web/cordis.patch.yml` 的 `- id: clawbot` 里改，改完会自动重启微信监听。
 
@@ -128,6 +139,7 @@ node /path/to/wechat-clawbot/lib/mcp-cli.js --check
 Codex 可读取 `clawbot://wechat-session`，或调用 `dsh_get_wechat_session` 查看微信对话。
 `dsh_notify_wechat({text: "…"})` 只发给扫码绑定的用户，并将带有 `[Codex 发给用户的]` 前缀的副本写入 DSH 历史，不额外触发 bot 回复。
 `dsh_send_to_session` 可以驱动所选的 DSH 对话，其回复不会自动发到微信；需要手机通知时使用通知工具。
+这两个工具都标注为会产生外部影响，在 Codex 默认的审批设置下，每次调用前会先征求你的同意。
 
 ### 从微信选择项目和对话来转发
 
@@ -135,7 +147,7 @@ Codex 可读取 `clawbot://wechat-session`，或调用 `dsh_get_wechat_session` 
 默认 socket 为 `$CODEX_HOME/app-server-control/app-server-control.sock`，`CODEX_HOME` 默认为 `~/.codex`。
 连接特定共享服务时设置 `codexSocket`；为独立后台模式选择 CLI 时设置 `codexBinary`。
 这几项写在本机 DSH `cordis.patch.yml` 的 `clawbot` 配置里，改动会重启插件。
-「Codex 会话联动」（`codexPeer`）则是立即生效的设置开关。
+「Codex 会话联动」（`codexPeer`）在设置卡片里开关，默认关；关着时这几个工具不会发给模型。改动同样会重启微信监听。
 
 共享服务必须是实际执行目标对话的那个服务，并支持官方的 Unix socket WebSocket 传输。
 可用 `codex app-server --listen unix://` 或 `--listen unix:///path/to/rpc.sock` 启动本机共享服务。
@@ -162,6 +174,7 @@ Codex 可读取 `clawbot://wechat-session`，或调用 `dsh_get_wechat_session` 
 它用已有的 Codex 登录和配置启动独立的 `codex app-server --listen stdio://`，无法判断另一个客户端是否仍在工作。
 未加载的历史对话必须先关闭原客户端，并明确允许后台续聊（`allowResume: true`）才会继续执行。
 模型、沙箱和审批策略不会被覆盖。独立服务的命令 / 文件审批和用户问题会转到微信，未支持的权限授予会被拒绝；共享服务的审批仍由原 Codex 客户端处理。
+**stdio 模式目前是实验性的**：转到微信的审批提示还不完整（看不到具体改动和额外权限），而且会发给当时正在和 bot 聊天的人。只建议在只有你一个人能给 bot 发消息时使用；默认的 socket 模式不受影响。
 
 ### 让 clawbot 查询和汇报 Codex 进度
 
@@ -181,6 +194,10 @@ HTTP 接口为 `POST /plugins/clawbot/mcp/codex/report` 和
 `GET /plugins/clawbot/mcp/codex/progress?threadId=…`，和已有接口一样受 bearer token 与 `mcpBridge` 开关保护。
 MCP 客户端只接受本机回环地址，并拒绝重定向。包里不会附带登录信息、真实对话快照、个人偏好、项目清单或本地文件索引。
 协议说明：[Codex App Server 官方文档](https://learn.chatgpt.com/docs/app-server)。
+
+## 贡献者
+
+- [@MistyHuang03](https://github.com/MistyHuang03)：Codex 联动（[#1](https://github.com/Alphainfix/wechat-clawbot/pull/1)）
 
 ## 开发
 

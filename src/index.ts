@@ -8,6 +8,7 @@
  *
  * @module wechat-clawbot
  */
+import fs from "node:fs";
 import path from "node:path";
 
 import type { Context } from "@deepseek-ai/cordis";
@@ -24,8 +25,12 @@ import { registerWechatGuidanceGlobal } from "./prompt.js";
 import { registerSubagentModelPolicy } from "./subagent-model.js";
 import { registerModelsRoute } from "./models-route.js";
 import { registerMcpRoutes } from "./mcp-route.js";
+import { registerOwnerNotifyTool } from "./owner-notify.js";
 import { CodexPeer } from "./codex-peer.js";
+import { claimInstance } from "./instance-guard.js";
 import { CodexProgressStore } from "./codex-progress.js";
+import { Backlog } from "./backlog.js";
+import { uploadFileTo } from "./tool.js";
 import { ensureMemoryFile } from "./memory.js";
 import { isHostSchedule, migrateLegacyReminders, type HostSchedule } from "./schedule-migrate.js";
 import { resolveStateDir } from "./ilink/storage/state-dir.js";
@@ -179,6 +184,8 @@ export function apply(ctx: Context, rawConfig?: Partial<ClawbotConfig>): () => P
 
   let bridge: WechatBridge | null = null;
   const codexProgress = new CodexProgressStore();
+  /** Messages WeChat would not take yet; shared by the bridge and the MCP notify route. */
+  const backlog = new Backlog();
   const codexPeer = new CodexPeer(config, codexProgress, {
     askWechat: (question, signal) => bridge?.askWechat(question, 300_000, signal) ?? Promise.resolve(null),
   });
@@ -260,7 +267,17 @@ export function apply(ctx: Context, rawConfig?: Partial<ClawbotConfig>): () => P
   // one WeChat message to the owner. Registered here rather than beside
   // registerModelsRoute because it needs `sendText` and the account getter,
   // both defined just above.
-  registerMcpRoutes(ctx, { config, sendText, getAccount: () => currentAccount, codexProgress });
+  registerMcpRoutes(ctx, { config, sendText, getAccount: () => currentAccount, codexProgress, backlog });
+
+  // notify_wechat for every other DSH conversation, in every working directory:
+  // registered on the root context, so it is global (owner-notify.ts). The
+  // WeChat conversation hides it (bridge.ts restrictTools) and the tool refuses
+  // it as well, because that conversation already has send_wechat_text.
+  try {
+    registerOwnerNotifyTool(ctx, { config, sendText, getAccount: () => currentAccount, backlog });
+  } catch (err) {
+    logger.warn(`notify_wechat: registration failed: ${String(err).slice(0, 200)}`);
+  }
 
   /** Pick the first bound account (v1 supports a single account). */
   const pickAccount = (): ResolvedWeixinAccount | null => {
@@ -275,8 +292,12 @@ export function apply(ctx: Context, rawConfig?: Partial<ClawbotConfig>): () => P
   };
 
   /** Start the monitor for the current account (idempotent). */
+  // Set once a newer instance has taken over (see instance-guard.ts) or we were
+  // unloaded: from then on nothing here may start talking to WeChat again.
+  let superseded = false;
+
   const startMonitor = (): void => {
-    if (monitorTask) return;
+    if (monitorTask || superseded) return;
     const account = pickAccount();
     if (!account) {
       logger.info("startMonitor: no bound account; waiting for `clawbot login`");
@@ -292,6 +313,22 @@ export function apply(ctx: Context, rawConfig?: Partial<ClawbotConfig>): () => P
       getAccount: () => currentAccount,
       getContextToken: (sender) => router?.contextTokenFor(sender) ?? "",
       pending,
+      backlog,
+      // A kept file goes through the same compression and CDN checks as send_wechat_file.
+      sendFile: async (to, file) => {
+        const bound = currentAccount;
+        if (!bound?.configured) return { ok: false, windowClosed: false, permanent: false, message: "no bound WeChat account" };
+        return uploadFileTo({
+          config,
+          account: bound,
+          to,
+          contextToken: router?.contextTokenFor(to) ?? "",
+          resolved: file.path,
+          bytes: fs.statSync(file.path).size,
+          caption: file.caption,
+          original: file.original,
+        });
+      },
     });
     router = new InboundRouter({
       config,
@@ -399,10 +436,26 @@ export function apply(ctx: Context, rawConfig?: Partial<ClawbotConfig>): () => P
     }
   });
 
-  if (config.autoStart) startMonitor();
+  // One live instance per process. If the host reloaded us without disposing
+  // the previous instance, retire it first, then start our own monitor.
+  const claim = claimInstance(async (reason) => {
+    superseded = true;
+    logger.warn(`clawbot instance: ${reason}; stopping this older one (the host did not dispose it)`);
+    watcher.close();
+    codexPeer.close();
+    await stopMonitor(reason);
+  });
+  logger.info(`clawbot instance #${claim.id} active`);
+  if (config.autoStart) {
+    void claim.ready.then(() => {
+      if (claim.isCurrent()) startMonitor();
+    });
+  }
 
   return async () => {
-    logger.info("plugin unload: stopping clawbot");
+    logger.info(`plugin unload: stopping clawbot (instance #${claim.id})`);
+    superseded = true;
+    claim.release();
     watcher.close();
     codexPeer.close();
     await stopMonitor("plugin unload");
