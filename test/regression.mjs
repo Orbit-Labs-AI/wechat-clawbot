@@ -2247,8 +2247,8 @@ function check(name, ok, detail) {
   setLogLevel("error");
   const cal = await import(join(ROOT, "lib/mac-calendar.js"));
   const cfgMod = await import(join(ROOT, "lib/config.js"));
-  check("calendar: off by default, with no name",
-    cfgMod.DEFAULT_CONFIG.macCalendar === false && cfgMod.DEFAULT_CONFIG.macCalendarName === "");
+  check("calendar: on by default in this fork, with no name",
+    cfgMod.DEFAULT_CONFIG.macCalendar === true && cfgMod.DEFAULT_CONFIG.macCalendarName === "");
   check("calendar: the tool switches are hot (the card can only write volatile fields), and flipping one restarts the listener",
     cfgMod.HOT_FIELDS.has("macCalendar") && cfgMod.HOT_FIELDS.has("codexPeer") && cfgMod.HOT_FIELDS.has("macCalendarName")
       && /const toolSwitches = hot\.filter\(\(key\) => key === "macCalendar" \|\| key === "codexPeer"\);[\s\S]{0,400}await stopMonitor\([\s\S]{0,80}startMonitor\(\);/
@@ -3298,8 +3298,8 @@ function check(name, ok, detail) {
     const memPath = join(state, "memory.md");
     const copyPath = join(state, "secretary-rules.md");
     const read = () => readFileSync(memPath, "utf-8");
-    check("secretary: off by default, and hot (the card can write it; index.ts edits memory.md when it flips)",
-      cfgS.DEFAULT_CONFIG.secretary === false && cfgS.normalizeConfig({}).secretary === false
+    check("secretary: on by default in this fork, and hot (the card can write it; index.ts edits memory.md when it flips)",
+      cfgS.DEFAULT_CONFIG.secretary === true && cfgS.normalizeConfig({}).secretary === true
       && cfgS.normalizeConfig({ secretary: true }).secretary === true && cfgS.HOT_FIELDS.has("secretary"));
 
     // A fresh install has no memory.md yet: switching on seeds it, then adds the rules.

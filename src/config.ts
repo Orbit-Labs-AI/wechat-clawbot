@@ -173,8 +173,9 @@ export interface ClawbotConfig {
   /**
    * 全天候秘书, the all-day secretary: the macOS Calendar (mac-calendar.ts: read
    * every calendar, plan in one dedicated calendar) and alarms (mac-alarms.ts:
-   * urgent reminders that ring like an alarm). Off by default; while off the
-   * tools are not registered, so it costs nothing. The settings card's one
+   * urgent reminders that ring like an alarm). On by default in this fork
+   * (upstream ships it off); while off the tools are not registered, so it
+   * costs nothing. The settings card's one
    * switch sets this and `secretary` together.
    */
   macCalendar: boolean;
@@ -274,12 +275,12 @@ export const DEFAULT_CONFIG: ClawbotConfig = {
   mcpBridge: true,
   codexPeer: false,
   codexTransport: "socket",
-  macCalendar: false,
+  macCalendar: true, // fork default: on (upstream ships off; macOS only)
   macCalendarName: "",
   macCalendarAlert: true,
   macCalendarAlertMinutes: 10,
   macCalendarAsk: true,
-  secretary: false,
+  secretary: true, // fork default: on (upstream ships off)
   imageQuality: 80,
   compressThresholdBytes: 1024 * 1024,
   noticeMinBytes: 2 * 1024 * 1024,
@@ -460,8 +461,8 @@ export const BaseConfig = Schema.object({
   codexBinary: Schema.string()
     .description("【改动会重启微信监听】Codex CLI 路径,留空自动查找"),
   macCalendar: Schema.boolean()
-    .default(false)
-    .description("【全天候秘书】【改动会重启微信监听】让 bot 读取 Mac「日历」里所有账户的日程(含备注)、在专用日历里自主安排,并能设闹钟(紧急提醒:到点像闹钟一样响,响在「查找」里作为“我的位置”的设备上,一般是 iPhone)。仅 macOS,默认关;关着时不占 token。打开后在 Mac 前点设置卡片上的「一键授权」。设置卡片上的开关会连同 secretary 一起拨"),
+    .default(true)
+    .description("【全天候秘书】【改动会重启微信监听】让 bot 读取 Mac「日历」里所有账户的日程(含备注)、在专用日历里自主安排,并能设闹钟(紧急提醒:到点像闹钟一样响,响在「查找」里作为“我的位置”的设备上,一般是 iPhone)。仅 macOS,默认开(本分支);关着时不占 token。第一次用前在 Mac 前点设置卡片上的「一键授权」。设置卡片上的开关会连同 secretary 一起拨"),
   macCalendarName: Schema.string()
     .default("")
     .description("bot 专用日历的名字(例如「规划」)。bot 在这个日历里自主加、改、删;动别的日历前问不问你,看「改别的日历前先问我」。第一次用到时自动创建。闹钟清单第一次设闹钟时按它起名(「规划 闹钟」),之后改名字也继续用那个清单(已经设的闹钟不会丢)"),
@@ -477,7 +478,7 @@ export const BaseConfig = Schema.object({
     .default(true)
     .description("bot 往专用日历以外的日历里加、改、删日程前,先在微信里问你,回「好」才动(默认开)。关掉就直接改;只读和订阅的日历本来就改不了,会通知其他参与者的改动仍会先问"),
   secretary: Schema.boolean()
-    .default(false)
+    .default(true)
     .description("全天候秘书的规则(要 macCalendar 也开着):打开时把一套排日程、定闹钟的规则写进长期记忆 memory.md 的「## 全天候秘书」一节,可以自己改;关掉时移出记忆并留一份副本,再打开原样放回。设置卡片上和 macCalendar 是同一个开关"),
   codexSocket: Schema.string()
     .description("【改动会重启微信监听】共享 App Server 的 socket 路径,留空使用 Codex 默认路径"),
